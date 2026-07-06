@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>兆麟站 巴士/輕鐵報時器</title>
+    <style>
+        /* 針對 E-ink 螢幕優化：純黑白、高對比度、無過渡動畫 */
+        body {
+            background-color: #ffffff;
+            color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 5px solid #000000;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 42px;
+            font-weight: 900;
+        }
+        .header .status {
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        .route-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .route-card {
+            border: 4px solid #000000;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .route-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .route-number {
+            font-size: 64px;
+            font-weight: 900;
+            line-height: 1;
+        }
+        .route-dest {
+            font-size: 22px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .eta-list {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .eta-item {
+            font-size: 32px;
+            font-weight: bold;
+        }
+        .eta-item.first {
+            font-size: 48px;
+            font-weight: 900;
+            border-bottom: 2px solid #000000;
+        }
+        .loading {
+            font-size: 24px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>兆麟站 Tiu Lun</h1>
+        <div class="status" id="update-status">正在載入數據...</div>
+    </div>
+
+    <div class="route-container">
+        <div class="route-card">
+            <div class="route-info">
+                <div class="route-number">A33X</div>
+                <div class="route-dest">往 機場 (地面運輸中心)</div>
+            </div>
+            <div class="eta-list" id="kmb-a33x">
+                <div class="loading">讀取中...</div>
+            </div>
+        </div>
+
+        <div class="route-card">
+            <div class="route-info">
+                <div class="route-number">506</div>
+                <div class="route-dest">往 屯門碼頭 (循環線)</div>
+            </div>
+            <div class="eta-list" id="mtr-506">
+                <div class="loading">讀取中...</div>
+            </div>
+        </div>
+
+        <div class="route-card">
+            <div class="route-info">
+                <div class="route-number">507</div>
+                <div class="route-dest">往 田景</div>
+            </div>
+            <div class="eta-list" id="lrt-507">
+                <div class="loading">讀取中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 配置參數
+        // 兆麟九巴站點 ID (兆麟苑): 2A84A9684C2F79EF
+        const KMB_STOP_ID = "2A84A9684C2F79EF"; 
+        // 港鐵/輕鐵 兆麟站 ID: 240
+        const MTR_STOP_ID = 240; 
+
+        async function fetchETA() {
+            document.getElementById('update-status').innerText = "正在更新...";
+            
+            // 同步執行三個 API 請求
+            await Promise.all([
+                updateKMB_A33X(),
+                updateMTR_506(),
+                updateLRT_507()
+            ]);
+
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
+                            now.getMinutes().toString().padStart(2, '0') + ':' + 
+                            now.getSeconds().toString().padStart(2, '0');
+            document.getElementById('update-status').innerText = `最後更新: ${timeStr} (30秒後自動重新整理)`;
+        }
+
+        // 1. 九巴 A33X API 處理
+        async function updateKMB_A33X() {
+            const el = document.getElementById('kmb-a33x');
+            try {
+                // 機場方向 service_type 為 1
+                const response = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/eta/${KMB_STOP_ID}/A33X/1`);
+                const data = await response.json();
+                
+                // 過濾出兆麟站往機場方向的班次
+                const etas = data.data
+                    .filter(item => item.dir === "O") // Outbound 往機場
+                    .map(item => {
+                        if (!item.eta) return null;
+                        const diff = Math.ceil((new Date(item.eta) - new Date()) / 60000);
+                        return diff <= 0 ? "即將抵達" : `${diff} 分鐘`;
+                    })
+                    .filter(item => item !== null)
+                    .slice(0, 2);
+
+                renderETAList(el, etas);
+            } catch (error) {
+                el.innerHTML = '<div class="loading">連線錯誤</div>';
+            }
+        }
+
+        // 2. 港鐵巴士 506 API 處理
+        async function updateMTR_506() {
+            const el = document.getElementById('mtr-506');
+            try {
+                // 港鐵巴士 API (Route 506)
+                const response = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/bus/getETA.php?route=506`);
+                const data = await response.json();
+                
+                // 篩選站點 ID 為 240 (兆麟) 的班次
+                const etas = data.bus
+                    .filter(item => parseInt(item.busStopId) === MTR_STOP_ID)
+                    .map(item => {
+                        const diff = Math.ceil(parseInt(item.departureTimeInSecond) / 60);
+                        return diff <= 0 ? "即將抵達" : `${diff} 分鐘`;
+                    })
+                    .slice(0, 2);
+
+                renderETAList(el, etas);
+            } catch (error) {
+                el.innerHTML = '<div class="loading">連線錯誤</div>';
+            }
+        }
+
+        // 3. 輕鐵 507 API 處理
+        async function updateLRT_507() {
+            const el = document.getElementById('lrt-507');
+            try {
+                // 港鐵輕鐵 API
+                const response = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/lrt/getETA.php?station_id=${MTR_STOP_ID}`);
+                const data = await response.json();
+                
+                // 篩選 507 綫
+                const etas = data.platform_list
+                    .flatMap(platform => platform.route_list)
+                    .filter(route => route.route_no === "507")
+                    .map(route => {
+                        // timeout 可能為字串或數字，代表剩餘分鐘
+                        const min = parseInt(route.time_en);
+                        if (isNaN(min) || min <= 0) {
+                            return "即將抵達";
+                        }
+                        return `${min} 分鐘`;
+                    })
+                    .slice(0, 2);
+
+                renderETAList(el, etas);
+            } catch (error) {
+                el.innerHTML = '<div class="loading">連線錯誤</div>';
+            }
+        }
+
+        // 渲染時間列表的輔助函式
+        function renderETAList(element, etaArray) {
+            if (!etaArray || etaArray.length === 0) {
+                element.innerHTML = '<div class="loading">暫無班次</div>';
+                return;
+            }
+            
+            let html = '';
+            etaArray.forEach((eta, index) => {
+                const className = index === 0 ? 'eta-item first' : 'eta-item';
+                html += `<div class="${className}">${eta}</div>`;
+            });
+            element.innerHTML = html;
+        }
+
+        // 初始執行與設定每 30 秒定時更新
+        fetchETA();
+        setInterval(fetchETA, 30000);
+    </script>
+</body>
+</html>
