@@ -82,9 +82,7 @@
                 <div class="route-number">A33X</div>
                 <div class="route-dest">往 機場 (海榮路)</div>
             </div>
-            <div class="eta-list" id="kmb-a33x">
-                <div class="loading">讀取中...</div>
-            </div>
+            <div class="eta-list" id="kmb-a33x"><div class="loading">讀取中...</div></div>
         </div>
 
         <div class="route-card">
@@ -92,9 +90,7 @@
                 <div class="route-number">B3</div>
                 <div class="route-dest">往 深圳灣口岸 (第8站)</div>
             </div>
-            <div class="eta-list" id="ctb-b3">
-                <div class="loading">讀取中...</div>
-            </div>
+            <div class="eta-list" id="ctb-b3"><div class="loading">讀取中...</div></div>
         </div>
 
         <div class="route-card">
@@ -102,19 +98,15 @@
                 <div class="route-number">506</div>
                 <div class="route-dest">往 屯門碼頭</div>
             </div>
-            <div class="eta-list" id="mtr-506">
-                <div class="loading">讀取中...</div>
-            </div>
+            <div class="eta-list" id="mtr-506"><div class="loading">讀取中...</div></div>
         </div>
 
         <div class="route-card">
             <div>
                 <div class="route-number">507</div>
-                <div class="route-dest">往 田景 (兆麟站時刻表)</div>
+                <div class="route-dest">往 田景 (兆麟站 240)</div>
             </div>
-            <div class="eta-list" id="lrt-507">
-                <div class="loading">讀取中...</div>
-            </div>
+            <div class="eta-list" id="lrt-507"><div class="loading">讀取中...</div></div>
         </div>
     </div>
 
@@ -122,11 +114,11 @@
         const KMB_STOP_ID = "1D44677AEFBA8773"; 
         const CTB_STOP_ID = "001922";            
         const MTR_BUS_STOP_ID = "250";           
-        const LRT_STATION_ID = "275"; // 依要求更改為 275
+        const LRT_STATION_ID = "240"; // 使用 240
 
         const PROXY = "https://corsproxy.io/?";
 
-        // --- 旋轉邏輯控制 ---
+        // --- 旋轉邏輯 ---
         let currentAngle = 0;
         function rotatePage() {
             currentAngle = (currentAngle + 90) % 360;
@@ -142,22 +134,17 @@
             }
         }
 
-        // --- 總體數據獲取排程 ---
+        // --- 總體抓取 ---
         async function fetchAllETA() {
             document.getElementById('update-status').innerText = "正在更新...";
-            
             await Promise.all([
                 updateKMB_A33X().catch(e => document.getElementById('kmb-a33x').innerHTML = `<div class="loading">錯誤</div>`),
                 updateCTB_B3().catch(e => document.getElementById('ctb-b3').innerHTML = `<div class="loading">錯誤</div>`),
                 updateMTR_506().catch(e => document.getElementById('mtr-506').innerHTML = `<div class="loading">錯誤</div>`),
                 updateLRT_507_Schedule().catch(e => document.getElementById('lrt-507').innerHTML = `<div class="loading">錯誤</div>`)
             ]);
-
             const now = new Date();
-            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
-                            now.getMinutes().toString().padStart(2, '0') + ':' + 
-                            now.getSeconds().toString().padStart(2, '0');
-            document.getElementById('update-status').innerText = `最後更新: ${timeStr}`;
+            document.getElementById('update-status').innerText = `最後更新: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
         }
 
         // 1. 九巴 A33X
@@ -170,16 +157,16 @@
             const etas = (jsonResult.data || [])
                 .map(item => {
                     if (!item.eta) return null;
-                    const busTime = new Date(item.eta);
-                    const minutesLeft = Math.ceil((busTime - currentTime) / 60000);
-                    return minutesLeft <= 0 ? "即將抵達" : `${minutesLeft} 分鐘`;
+                    const diff = Math.ceil((new Date(item.eta) - currentTime) / 60000);
+                    if (diff < -1) return null; // 過濾過期班次
+                    return diff <= 0 ? "即將抵達" : `${diff} 分鐘`;
                 })
                 .filter(item => item !== null).slice(0, 2);
 
             renderETAList(el, etas);
         }
 
-        // 2. 城巴 B3
+        // 2. 城巴 B3 (修復 BUG 版)
         async function updateCTB_B3() {
             const el = document.getElementById('ctb-b3');
             const targetUrl = `https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/${CTB_STOP_ID}/B3`;
@@ -191,8 +178,12 @@
                 .filter(item => item.dir === "O") 
                 .map(item => {
                     if (!item.eta) return null;
-                    const busTime = new Date(item.eta);
-                    const minutesLeft = Math.ceil((busTime - currentTime) / 60000);
+                    const diffMin = (new Date(item.eta) - currentTime) / 60000;
+                    
+                    // 【關鍵修復】如果差距小於 -1.5 分鐘，代表車子早開走了，屬於城巴 API 的殘留緩存，直接過濾掉
+                    if (diffMin < -1.5) return null; 
+                    
+                    const minutesLeft = Math.ceil(diffMin);
                     return minutesLeft <= 0 ? "即將抵達" : `${minutesLeft} 分鐘`;
                 })
                 .filter(item => item !== null).slice(0, 2);
@@ -211,13 +202,14 @@
                 .filter(item => item.busStopId === MTR_BUS_STOP_ID)
                 .map(item => {
                     const diff = Math.ceil(parseInt(item.departureTimeInSecond) / 60);
+                    if (diff < -1) return null;
                     return diff <= 0 ? "即將抵達" : `${diff} 分鐘`;
-                }).slice(0, 2);
+                }).filter(item => item !== null).slice(0, 2);
 
             renderETAList(el, etas);
         }
 
-        // 4. 輕鐵 507 時刻表 API (使用 station_id=275)
+        // 4. 輕鐵 507 依 getSchedule 網址提取
         async function updateLRT_507_Schedule() {
             const el = document.getElementById('lrt-507');
             const targetUrl = `https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule?station_id=${LRT_STATION_ID}`;
@@ -229,7 +221,6 @@
 
             if (jsonResult.schedule && jsonResult.schedule.lrt_time) {
                 scheduleTimes = jsonResult.schedule.lrt_time
-                    // 篩選路線 507 並且限制在往田景方向的月台
                     .filter(item => item.route_no === "507" && (item.platform_id === 1 || item.platform_id === "1"))
                     .map(item => {
                         const timeStr = item.time;
@@ -239,8 +230,8 @@
                         const scheduleDate = new Date();
                         scheduleDate.setHours(h, m, 0, 0);
 
-                        if (scheduleDate < now) return null;
                         const diffMin = Math.ceil((scheduleDate - now) / 60000);
+                        if (diffMin < -1) return null; // 過濾掉過期預定班次
                         return diffMin <= 0 ? "即將發車" : `${diffMin} 分鐘`;
                     })
                     .filter(item => item !== null)
