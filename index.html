@@ -3,34 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>兆麟 巴士到站報時</title>
+    <title>老鼠洲兒童遊樂場 報時器</title>
     <style>
-        /* 相容舊型瀏覽器的安全旋轉排版 */
-        html {
-            width: 100%;
-            height: 100%;
-            background-color: #ffffff;
-            overflow: hidden;
-        }
-
+        /* 針對 Kobo 螢幕優化的純直向、高對比度排版 */
         body { 
+            background-color: #ffffff; 
             color: #000000; 
             font-family: sans-serif; 
+            margin: 0; 
+            padding: 15px; 
             box-sizing: border-box; 
-            padding: 20px;
-            margin: 0;
-
-            /* 使用最基礎的原點旋轉，並用絕對定位拉回 */
-            position: absolute;
-            width: 100vh;
-            height: 100vw;
-            transform: rotate(90deg);
-            transform-origin: top left;
-            left: 100vw;
-            top: 0;
         }
-
-        /* 內容排版 */
         .header { 
             text-align: center; 
             border-bottom: 5px solid #000000; 
@@ -105,7 +88,7 @@
     <div class="route-card">
         <div>
             <div class="route-number">B3</div>
-            <div class="route-dest">老鼠洲兒童遊樂場 往 深圳灣口岸 (第8站)</div>
+            <div class="route-dest">往 深圳灣口岸 (第8站)</div>
         </div>
         <div class="eta-list" id="ctb-b3">
             <div class="loading">讀取中...</div>
@@ -125,7 +108,7 @@
     <div class="route-card">
         <div>
             <div class="route-number">507</div>
-            <div class="route-dest">往 田景 (兆麟站1號月台)</div>
+            <div class="route-dest">往 田景</div>
         </div>
         <div class="eta-list" id="lrt-507">
             <div class="loading">讀取中...</div>
@@ -154,7 +137,7 @@
             const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
                             now.getMinutes().toString().padStart(2, '0') + ':' + 
                             now.getSeconds().toString().padStart(2, '0');
-            document.getElementById('update-status').innerText = `最後更新: ${timeStr}`;
+            document.getElementById('update-status').innerText = `最後更新: ${timeStr} (30秒後自動重新整理)`;
         }
 
         // 1. 九巴 A33X
