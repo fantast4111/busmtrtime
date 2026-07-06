@@ -69,7 +69,6 @@
         const MTR_BUS_ROUTE = "506";           
         const LRT_STATION_ID = "240"; 
 
-        // 換用另一個極度穩定的開放 CORS 代理，防止請求被阻擋
         const PROXY = "https://api.allorigins.win/raw?url=";
 
         // --- 旋轉邏輯 ---
@@ -90,12 +89,12 @@
 
         // --- 總體抓取排程 ---
         async function fetchAllETA() {
-            document.getElementById('update-status').innerText = "正在更新...";
+            document.getElementById('update-status').innerText = "正在更新 (1分鐘/次)...";
             await Promise.all([
-                updateKMB_A33X().catch(e => document.getElementById('kmb-a33x').innerHTML = `<div class="loading">服務器繁忙</div>`),
-                updateCTB_B3().catch(e => document.getElementById('ctb-b3').innerHTML = `<div class="loading">服務器繁忙</div>`),
-                updateMTR_506_Schedule().catch(e => document.getElementById('mtr-506').innerHTML = `<div class="loading">服務器繁忙</div>`),
-                updateLRT_507_Schedule().catch(e => document.getElementById('lrt-507').innerHTML = `<div class="loading">服務器繁忙</div>`)
+                updateKMB_A33X().catch(e => document.getElementById('kmb-a33x').innerHTML = `<div class="loading">載入失敗</div>`),
+                updateCTB_B3().catch(e => document.getElementById('ctb-b3').innerHTML = `<div class="loading">載入失敗</div>`),
+                updateMTR_506_Schedule().catch(e => document.getElementById('mtr-506').innerHTML = `<div class="loading">載入失敗</div>`),
+                updateLRT_507_Schedule().catch(e => document.getElementById('lrt-507').innerHTML = `<div class="loading">載入失敗</div>`)
             ]);
             const now = new Date();
             document.getElementById('update-status').innerText = `最後更新: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
@@ -111,7 +110,7 @@
             const etas = (jsonResult.data || [])
                 .map(item => {
                     if (!item.eta) return null;
-                    const diff = Math.ceil((new Date(item.eta) - currentTime) / 60000);
+                    const diff = Math.round((new Date(item.eta) - currentTime) / 60000);
                     if (diff < -1) return null; 
                     return diff <= 0 ? "即將抵達" : `${diff} 分鐘`;
                 })
@@ -120,7 +119,7 @@
             renderETAList(el, etas);
         }
 
-        // 2. 城巴 B3 (強化版容錯邏輯)
+        // 2. 城巴 B3 
         async function updateCTB_B3() {
             const el = document.getElementById('ctb-b3');
             const targetUrl = `https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/${CTB_STOP_ID}/B3`;
@@ -134,15 +133,14 @@
                     if (!item.eta) return null;
                     const busTime = new Date(item.eta);
                     
-                    // 如果城巴時間解析失敗，降級處理直接截取字串時間顯示
                     if (isNaN(busTime.getTime())) {
                         return item.eta.substring(11, 16); 
                     }
 
                     const diffMin = (busTime - currentTime) / 60000;
-                    if (diffMin < -2.0) return null; // 車輛開走太久才過濾
+                    if (diffMin < -2.0) return null; 
                     
-                    const minutesLeft = Math.ceil(diffMin);
+                    const minutesLeft = Math.round(diffMin);
                     return minutesLeft <= 0 ? "即將抵達" : `${minutesLeft} 分鐘`;
                 })
                 .filter(item => item !== null).slice(0, 2);
@@ -175,8 +173,8 @@
                         const schedDate = new Date();
                         schedDate.setHours(h, m, 0, 0);
 
-                        const diff = Math.ceil((schedDate - now) / 60000);
-                        if (diff < -5) return null; // 寬鬆過濾
+                        const diff = Math.round((schedDate - now) / 60000);
+                        if (diff < -5) return null; 
                         return diff <= 0 ? `${timeStr} (已開)` : `${diff} 分鐘`;
                     })
                     .filter(item => item !== null).slice(0, 2);
@@ -184,7 +182,7 @@
             renderETAList(el, busTimes);
         }
 
-        // 4. 輕鐵 507 (Schedule 全放開安全機制)
+        // 4. 輕鐵 507 
         async function updateLRT_507_Schedule() {
             const el = document.getElementById('lrt-507');
             const targetUrl = `https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule?station_id=${LRT_STATION_ID}`;
@@ -195,11 +193,9 @@
             let scheduleTimes = [];
 
             if (jsonResult.schedule && jsonResult.schedule.lrt_time) {
-                // 篩選出所有今天 507 綫往田景(月台1)的時刻數據
                 const filteredRaw = jsonResult.schedule.lrt_time
                     .filter(item => item.route_no === "507" && (item.platform_id === 1 || item.platform_id === "1"));
 
-                // 先嘗試計算剩餘分鐘
                 scheduleTimes = filteredRaw.map(item => {
                     const timeStr = item.time;
                     if (!timeStr) return null;
@@ -207,13 +203,11 @@
                     const scheduleDate = new Date();
                     scheduleDate.setHours(h, m, 0, 0);
 
-                    const diffMin = Math.ceil((scheduleDate - now) / 60000);
-                    // 只要還沒過期超過 3 分鐘，就留著
+                    const diffMin = Math.round((scheduleDate - now) / 60000);
                     if (diffMin < -3) return null; 
                     return diffMin <= 0 ? "即將發車" : `${diffMin} 分鐘`;
                 }).filter(item => item !== null);
 
-                // 【降級防護網】如果算完分鐘後發現被濾到變空陣列，就「直接顯示時間」
                 if (scheduleTimes.length === 0 && filteredRaw.length > 0) {
                     scheduleTimes = filteredRaw.slice(0, 2).map(item => item.time);
                 }
@@ -234,8 +228,11 @@
             element.innerHTML = html;
         }
 
+        // 初次載入
         fetchAllETA();
-        setInterval(fetchAllETA, 30000);
+        
+        // 【關鍵修改】：將原本的 30000 毫秒改為 60000 毫秒 (1分鐘)
+        setInterval(fetchAllETA, 60000);
     </script>
 </body>
 </html>
