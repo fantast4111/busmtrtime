@@ -5,14 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>老鼠洲兒童遊樂場 報時器</title>
     <style>
-        /* 旋轉核心控制 */
-        html, body {
+        /* 相容舊型瀏覽器的安全旋轉排版 */
+        html {
             width: 100%;
             height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
             background-color: #ffffff;
+            overflow: hidden;
         }
 
         body { 
@@ -20,20 +18,19 @@
             font-family: sans-serif; 
             box-sizing: border-box; 
             padding: 20px;
+            margin: 0;
 
-            /* 順時針旋轉 90 度並重新定位基準點 */
-            transform: rotate(90deg);
-            transform-origin: bottom left;
-            
-            /* 強制讓旋轉後的寬高對調，適應螢幕 */
+            /* 使用最基礎的原點旋轉，並用絕對定位拉回 */
             position: absolute;
-            top: -100%;
-            left: 0;
             width: 100vh;
             height: 100vw;
+            transform: rotate(90deg);
+            transform-origin: top left;
+            left: 100vw;
+            top: 0;
         }
 
-        /* 內容排版優化 */
+        /* 內容排版 */
         .header { 
             text-align: center; 
             border-bottom: 5px solid #000000; 
@@ -157,7 +154,7 @@
             const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
                             now.getMinutes().toString().padStart(2, '0') + ':' + 
                             now.getSeconds().toString().padStart(2, '0');
-            document.getElementById('update-status').innerText = `最後更新: ${timeStr} (30秒後自動重新整理)`;
+            document.getElementById('update-status').innerText = `最後更新: ${timeStr}`;
         }
 
         // 1. 九巴 A33X
@@ -220,4 +217,36 @@
         // 4. 輕鐵 507
         async function updateLRT_507() {
             const el = document.getElementById('lrt-507');
-            const targetUrl = `
+            const targetUrl = `https://rt.data.gov.hk/v1/transport/mtr/lrt/getETA.php?station_id=${LRT_STATION_ID}`;
+            const response = await fetch(`${PROXY}${encodeURIComponent(targetUrl)}`);
+            const jsonResult = await response.json();
+            
+            const etas = (jsonResult.platform_list || [])
+                .filter(platform => platform.platform_id === 1) 
+                .flatMap(platform => platform.route_list || [])
+                .filter(route => route.route_no === "507")
+                .map(route => {
+                    const min = parseInt(route.time_en);
+                    return (isNaN(min) || min <= 0) ? "即將抵達" : `${min} 分鐘`;
+                }).slice(0, 2);
+
+            renderETAList(el, etas);
+        }
+
+        function renderETAList(element, etaArray) {
+            if (!etaArray || etaArray.length === 0) {
+                element.innerHTML = '<div class="loading">暫無班次</div>';
+                return;
+            }
+            let html = '';
+            etaArray.forEach((eta, index) => {
+                html += `<div class="${index === 0 ? 'eta-item first' : 'eta-item'}">${eta}</div>`;
+            });
+            element.innerHTML = html;
+        }
+
+        fetchAllETA();
+        setInterval(fetchAllETA, 30000);
+    </script>
+</body>
+</html>
