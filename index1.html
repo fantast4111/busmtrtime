@@ -3,64 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="60">
-    <title>交通實時報時器</title>
+    <title>交通實時報時器 (修正 2x2 版)</title>
     <style>
+        * { box-sizing: border-box; }
         body { 
-            font-family: sans-serif; 
-            background-color: #ffffff; 
-            color: #000000; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #f4f4f6; 
+            color: #333333; 
             padding: 15px; 
             margin: 0;
         }
-        .route-card { 
-            border: 6px solid #000000; /* 超粗黑框，極度適合 E-ink */
-            padding: 15px; 
-            margin-bottom: 12px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-        }
-        .route-number { font-size: 44px; font-weight: 900; line-height: 1; }
-        .route-dest { font-size: 18px; font-weight: bold; margin-top: 5px; }
-        
-        .eta-list { text-align: right; }
-        .first-eta { font-size: 30px; font-weight: 900; display: block; }
-        /* 100% 純黑，拒絕任何 E-ink 殘影 */
-        .second-eta { font-size: 18px; font-weight: normal; color: #000000; display: block; margin-top: 6px; }
         
         #update-status { 
             text-align: center; 
             font-size: 14px; 
             font-weight: bold; 
             margin-bottom: 15px; 
-            border-bottom: 4px solid #000; 
-            padding-bottom: 8px; 
+            background: #ffffff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* 2x2 網格佈局 */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .route-card { 
+            border-radius: 12px;
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: space-between; 
+            min-height: 160px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            color: #ffffff;
+        }
+        
+        /* 路線主題顏色 */
+        .kmb-card { background: linear-gradient(135deg, #E60012, #B3000E); } /* 九巴紅 */
+        .ctb-card { background: linear-gradient(135deg, #0053A0, #003366); } /* 城巴藍底 */
+        .mtr-card { background: linear-gradient(135deg, #532A7A, #3B1E57); } /* 港鐵巴士紫 */
+        .lrt-card { background: linear-gradient(135deg, #74B62E, #558720); } /* 輕鐵綠 */
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .route-number { 
+            font-size: 40px; 
+            font-weight: 900; 
+            line-height: 1; 
+        }
+        
+        .ctb-card .route-number { color: #FFD200; } /* 城巴黃 */
+
+        .route-dest { 
+            font-size: 16px; 
+            font-weight: bold; 
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        
+        .eta-list { 
+            text-align: right; 
+            margin-top: 15px;
+        }
+        .first-eta { font-size: 30px; font-weight: 900; display: block; }
+        .second-eta { font-size: 16px; font-weight: normal; color: rgba(255,255,255,0.75); display: block; margin-top: 2px; }
+
+        @media (max-width: 500px) {
+            .grid-container {
+                grid-template-columns: 1fr;
+            }
+            .route-card { min-height: 130px; }
         }
     </style>
 </head>
 <body>
 
-    <div id="update-status">正在載入實時數據...</div>
+    <div id="update-status">正在啟動...</div>
 
-    <div class="route-card">
-        <div><div class="route-number">A33X</div><div class="route-dest">往 機場</div></div>
-        <div class="eta-list" id="kmb-a33x">讀取中...</div>
-    </div>
+    <div class="grid-container">
+        <!-- 1. 九巴 A33X -->
+        <div class="route-card kmb-card">
+            <div class="card-header">
+                <div class="route-number">A33X</div>
+                <div class="route-dest">往 機場</div>
+            </div>
+            <div class="eta-list" id="kmb-a33x">讀取中...</div>
+        </div>
 
-    <div class="route-card">
-        <div><div class="route-number">B3</div><div class="route-dest">往 深圳灣</div></div>
-        <div class="eta-list" id="ctb-b3">讀取中...</div>
-    </div>
+        <!-- 2. 城巴 B3 -->
+        <div class="route-card ctb-card">
+            <div class="card-header">
+                <div class="route-number">B3</div>
+                <div class="route-dest">往 深圳灣</div>
+            </div>
+            <div class="eta-list" id="ctb-b3">讀取中...</div>
+        </div>
 
-    <div class="route-card">
-        <div><div class="route-number">506</div><div class="route-dest">往 屯門碼頭</div></div>
-        <div class="eta-list" id="mtr-506">讀取中...</div>
-    </div>
+        <!-- 3. 港鐵巴士 506 -->
+        <div class="route-card mtr-card">
+            <div class="card-header">
+                <div class="route-number">506</div>
+                <div class="route-dest">往 屯門碼頭</div>
+            </div>
+            <div class="eta-list" id="mtr-506">讀取中...</div>
+        </div>
 
-    <div class="route-card">
-        <div><div class="route-number">507</div><div class="route-dest">往 田景</div></div>
-        <div class="eta-list" id="lrt-507">讀取中...</div>
+        <!-- 4. 輕鐵 507 -->
+        <div class="route-card lrt-card">
+            <div class="card-header">
+                <div class="route-number">507</div>
+                <div class="route-dest">往 田景</div>
+            </div>
+            <div class="eta-list" id="lrt-507">讀取中...</div>
+        </div>
     </div>
 
     <script>
@@ -86,13 +151,14 @@
         }
 
         async function updateAll() {
-            document.getElementById('update-status').innerText = `最後更新: ${new Date().toLocaleTimeString()} (每分鐘整頁刷新)`;
+            document.getElementById('update-status').innerText = `最後更新: ${new Date().toLocaleTimeString()}`;
 
-            // 1. A33X
+            // 1. A33X (九巴)
             try {
                 const r = await fetch('https://data.etabus.gov.hk/v1/transport/kmb/eta/1D44677AEFBA8773/A33X/1');
                 const d = await r.json();
                 const times = d.data.slice(0, 2).map(i => {
+                    if (!i.eta) return null;
                     const diff = Math.round((new Date(i.eta) - new Date()) / 60000);
                     return formatMinutes(diff);
                 });
@@ -101,11 +167,12 @@
                 renderETA('kmb-a33x', []);
             }
 
-            // 2. B3
+            // 2. B3 (城巴)
             try {
                 const r = await fetch('https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/001922/B3');
                 const d = await r.json();
                 const times = d.data.filter(i => i.dir === 'O').slice(0, 2).map(i => {
+                    if (!i.eta) return null;
                     const diff = Math.round((new Date(i.eta) - new Date()) / 60000);
                     return formatMinutes(diff);
                 });
@@ -114,7 +181,7 @@
                 renderETA('ctb-b3', []);
             }
 
-            // 3. 506
+            // 3. 506 (港鐵巴士 - 修正為正確的 POST 格式與欄位)
             try {
                 const r = await fetch('https://rt.data.gov.hk/v1/transport/mtr/bus/getSchedule', {
                     method: 'POST',
@@ -122,21 +189,23 @@
                     body: JSON.stringify({ language: 'zh', routeName: '506' })
                 });
                 const data = await r.json();
+                // 修正：官方欄位為大寫的 busStop 及 busStopId
                 const stop = data.busStop?.find(s => s.busStopId.includes("506-D010") && s.bus?.length > 0);
+                // 修正：官方時間欄位為 departureTimeText 或 arrivalTimeText
                 const times = stop ? stop.bus.slice(0, 2).map(b => b.departureTimeText || b.arrivalTimeText || "即將開出") : [];
                 renderETA('mtr-506', times);
             } catch (e) {
+                console.error("506 錯誤:", e);
                 renderETA('mtr-506', []);
             }
 
-            // 4. 507
+            // 4. 507 (輕鐵)
             try {
                 const r = await fetch('https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule?station_id=240');
                 const d = await r.json();
                 const trains = d.platform_list?.flatMap(p => p.route_list).filter(i => i.route_no === "507" && i.dest_ch === "田景");
                 const times = trains.slice(0, 2).map(t => {
-                    const num = parseInt(t.time_ch);
-                    return isNaN(num) ? (t.time_ch === "即將到達" ? t.time_ch : null) : formatMinutes(num);
+                    return t.time_ch ? t.time_ch.replace('分鐘', ' 分鐘') : null;
                 });
                 renderETA('lrt-507', times);
             } catch (e) {
@@ -144,8 +213,11 @@
             }
         }
 
-        // 啟動加載
+        // 初始化執行
         updateAll();
+        
+        // 每 60 秒自動刷新
+        setInterval(updateAll, 60000);
     </script>
 </body>
 </html>
