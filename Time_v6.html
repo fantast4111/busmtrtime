@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交通實時報時器 (Emoji 精簡拖放版)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #0f172a; 
+            color: #f8fafc; 
+            padding: 12px; 
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #update-status { 
+            text-align: center; 
+            font-size: 13px; 
+            font-weight: 600; 
+            margin-bottom: 12px; 
+            background: rgba(30, 41, 59, 0.8);
+            color: #94a3b8;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px);
+        }
+
+        /* 響應式網格佈局 */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 10px;
+            flex-grow: 1;
+        }
+
+        /* 改低卡片高度與緊湊邊距 */
+        .route-card { 
+            border-radius: 12px;
+            padding: 10px 14px; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: space-between; 
+            height: 115px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+            color: #ffffff;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            cursor: grab;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .route-card:active {
+            cursor: grabbing;
+        }
+
+        /* 拖放狀態樣式 */
+        .route-card.dragging {
+            opacity: 0.4;
+            transform: scale(0.95);
+        }
+
+        .route-card.drag-over {
+            border: 2px dashed #facc15;
+            transform: scale(1.02);
+        }
+
+        /* 路線主題顏色 */
+        .kmb-card { background: linear-gradient(135deg, #dc2626, #991b1b); } /* 九巴紅 */
+        .ctb-card { background: linear-gradient(135deg, #0284c7, #0369a1); } /* 城巴藍 */
+        .mtr-card { background: linear-gradient(135deg, #7e22ce, #581c87); } /* 港鐵巴士紫 */
+        .lrt-card { background: linear-gradient(135deg, #16a34a, #15803d); } /* 輕鐵綠 */
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2;
+            pointer-events: none; /* 避免拖拽時影響子元素 */
+        }
+
+        .route-number { 
+            font-size: 24px; 
+            font-weight: 900; 
+            line-height: 1; 
+            letter-spacing: -0.5px;
+        }
+        
+        .ctb-card .route-number { color: #facc15; } /* 城巴黃 */
+
+        .route-dest { 
+            font-size: 13px; 
+            font-weight: 700; 
+            background: rgba(0, 0, 0, 0.25);
+            padding: 3px 8px;
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* 動態軌道區域 */
+        .track-container {
+            position: relative;
+            height: 24px;
+            margin: 4px 0;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 12px;
+            padding: 0 6px;
+            display: flex;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+            pointer-events: none; /* 避免拖拽時影響子元素 */
+        }
+
+        .track-line {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            height: 2px;
+            border-top: 2px dashed rgba(255, 255, 255, 0.35);
+            z-index: 1;
+        }
+
+        .stop-icon {
+            position: absolute;
+            right: 6px;
+            font-size: 14px;
+            z-index: 2;
+            background: rgba(255, 255, 255, 0.2);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 移動 Emoji 車輛 */
+        .vehicle-runner {
+            position: absolute;
+            left: 0%; 
+            transform: translateX(-50%);
+            z-index: 3;
+            transition: left 1s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+        }
+
+        .eta-list { 
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            z-index: 2;
+            pointer-events: none; /* 避免拖拽時影響子元素 */
+        }
+        .first-eta { font-size: 18px; font-weight: 900; line-height: 1; }
+        .second-eta { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.85); }
+    </style>
+</head>
+<body>
+
+    <div id="update-status">正在啟動報時器...</div>
+
+    <div class="grid-container" id="grid-container">
+        <!-- 1. 九巴 A33X 🚌 -->
+        <div class="route-card kmb-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">A33X</div>
+                <div class="route-dest">往 機場</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-kmb-a33x" style="left: 0%;">🚌</div>
+                <div class="stop-icon">🚏</div>
+            </div>
+            <div class="eta-list" id="kmb-a33x">讀取中...</div>
+        </div>
+
+        <!-- 2. 九巴 60X 🚌 -->
+        <div class="route-card kmb-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">60X</div>
+                <div class="route-dest">往 佐敦</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-kmb-60x" style="left: 0%;">🚌</div>
+                <div class="stop-icon">🚏</div>
+            </div>
+            <div class="eta-list" id="kmb-60x">讀取中...</div>
+        </div>
+
+        <!-- 3. 九巴 60M 🚌 -->
+        <div class="route-card kmb-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">60M</div>
+                <div class="route-dest">往 荃灣站</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-kmb-60m" style="left: 0%;">🚌</div>
+                <div class="stop-icon">🚏</div>
+            </div>
+            <div class="eta-list" id="kmb-60m">讀取中...</div>
+        </div>
+
+        <!-- 4. 九巴 263 🚌 -->
+        <div class="route-card kmb-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">263</div>
+                <div class="route-dest">往 沙田站</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-kmb-263" style="left: 0%;">🚌</div>
+                <div class="stop-icon">🚏</div>
+            </div>
+            <div class="eta-list" id="kmb-263">讀取中...</div>
+        </div>
+
+        <!-- 5. 城巴 B3 🚍 -->
+        <div class="route-card ctb-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">B3</div>
+                <div class="route-dest">往 深圳灣</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-ctb-b3" style="left: 0%;">🚍</div>
+                <div class="stop-icon">🚏</div>
+            </div>
+            <div class="eta-list" id="ctb-b3">讀取中...</div>
+        </div>
+
+        <!-- 6. 港鐵巴士 506 🚌 -->
+        <div class="route-card mtr-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">506</div>
+                <div class="route-dest">往 屯門碼頭</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-mtr-506" style="left: 0%;">🚌</div>
+                <div class="stop-icon">🚏</div>
+            </div>
+            <div class="eta-list" id="mtr-506">讀取中...</div>
+        </div>
+
+        <!-- 7. 輕鐵 507 🚃 -->
+        <div class="route-card lrt-card" draggable="true">
+            <div class="card-header">
+                <div class="route-number">507</div>
+                <div class="route-dest">往 田景</div>
+            </div>
+            <div class="track-container">
+                <div class="track-line"></div>
+                <div class="vehicle-runner" id="runner-lrt-507" style="left: 0%;">🚃</div>
+                <div class="stop-icon">🚉</div>
+            </div>
+            <div class="eta-list" id="lrt-507">讀取中...</div>
+        </div>
+    </div>
+
+    <script>
+        // HTML5 Drag and Drop 功能
+        const container = document.getElementById('grid-container');
+        let draggedItem = null;
+
+        container.addEventListener('dragstart', (e) => {
+            if (e.target.classList.contains('route-card')) {
+                draggedItem = e.target;
+                e.target.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        });
+
+        container.addEventListener('dragend', (e) => {
+            if (e.target.classList.contains('route-card')) {
+                e.target.classList.remove('dragging');
+                document.querySelectorAll('.route-card').forEach(card => card.classList.remove('drag-over'));
+                draggedItem = null;
+            }
+        });
+
+        container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const targetCard = e.target.closest('.route-card');
+            if (targetCard && targetCard !== draggedItem) {
+                document.querySelectorAll('.route-card').forEach(card => card.classList.remove('drag-over'));
+                targetCard.classList.add('drag-over');
+            }
+        });
+
+        container.addEventListener('dragleave', (e) => {
+            const targetCard = e.target.closest('.route-card');
+            if (targetCard) {
+                targetCard.classList.remove('drag-over');
+            }
+        });
+
+        container.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const targetCard = e.target.closest('.route-card');
+            
+            if (targetCard && draggedItem && targetCard !== draggedItem) {
+                targetCard.classList.remove('drag-over');
+                
+                // 取得所有卡片並進行位置交換 (自動貼齊 CSS Grid 網格)
+                const cards = Array.from(container.children);
+                const draggedIndex = cards.indexOf(draggedItem);
+                const targetIndex = cards.indexOf(targetCard);
+
+                if (draggedIndex < targetIndex) {
+                    container.insertBefore(draggedItem, targetCard.nextSibling);
+                } else {
+                    container.insertBefore(draggedItem, targetCard);
+                }
+            }
+        });
+
+        // API 報時相關邏輯
+        function parseMinutes(timeStr) {
+            if (!timeStr) return null;
+            if (typeof timeStr === 'number') return timeStr;
+            if (timeStr.includes("即將") || timeStr.includes("到達") || timeStr.includes("開出")) return 0;
+            const match = timeStr.match(/(\d+)/);
+            return match ? parseInt(match[1]) : null;
+        }
+
+        function formatMinutes(minutes) {
+            if (isNaN(minutes) || minutes === null || minutes === undefined) return null;
+            return minutes <= 0 ? "即將到達" : minutes + " 分鐘";
+        }
+
+        function updateVehiclePosition(runnerId, minutes) {
+            const runner = document.getElementById(runnerId);
+            if (!runner) return;
+
+            if (minutes === null || minutes === undefined) {
+                runner.style.left = "5%";
+                return;
+            }
+
+            const maxMins = 20;
+            const clampedMins = Math.max(0, Math.min(maxMins, minutes));
+            const percentage = ((maxMins - clampedMins) / maxMins) * 80 + 5;
+            runner.style.left = `${percentage}%`;
+        }
+
+        function renderETA(elementId, runnerId, rawTimes) {
+            const el = document.getElementById(elementId);
+            const validTimes = rawTimes.filter(t => t !== null && t !== undefined && t !== "NaN" && t !== "");
+
+            if (validTimes.length === 0) {
+                el.innerHTML = '<span class="first-eta">暫無班次</span>';
+                updateVehiclePosition(runnerId, null);
+                return;
+            }
+
+            let html = `<span class="first-eta">${validTimes[0]}</span>`;
+            if (validTimes[1]) {
+                html += `<span class="second-eta">下班: ${validTimes[1]}</span>`;
+            }
+            el.innerHTML = html;
+
+            const firstMins = parseMinutes(validTimes[0]);
+            updateVehiclePosition(runnerId, firstMins);
+        }
+
+        async function fetchKMBETA(elementId, runnerId, route, stopId, dir) {
+            try {
+                const r = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/eta/${stopId}/${route}/1`);
+                const d = await r.json();
+                const targetData = d.data.filter(i => i.dir === dir).sort((a, b) => a.eta_seq - b.eta_seq);
+                const times = targetData.slice(0, 2).map(i => {
+                    if (!i.eta) return null;
+                    const diff = Math.round((new Date(i.eta) - new Date()) / 60000);
+                    return formatMinutes(diff);
+                });
+                renderETA(elementId, runnerId, times);
+            } catch (e) {
+                renderETA(elementId, runnerId, []);
+            }
+        }
+
+        async function updateAll() {
+            document.getElementById('update-status').innerText = `最後更新: ${new Date().toLocaleTimeString()} (支援按住卡片拖放排序)`;
+
+            fetchKMBETA('kmb-a33x', 'runner-kmb-a33x', 'A33X', '1D44677AEFBA8773', 'O');
+            fetchKMBETA('kmb-60x', 'runner-kmb-60x', '60X', '1D44677AEFBA8773', 'O');
+            fetchKMBETA('kmb-60m', 'runner-kmb-60m', '60M', '1D44677AEFBA8773', 'O');
+            fetchKMBETA('kmb-263', 'runner-kmb-263', '263', '1D44677AEFBA8773', 'O');
+
+            try {
+                const r = await fetch('https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/001922/B3');
+                const d = await r.json();
+                const targetData = d.data.filter(i => i.dir === 'O').sort((a, b) => (a.eta_seq || 0) - (b.eta_seq || 0));
+                const times = targetData.slice(0, 2).map(i => {
+                    if (!i.eta) return null;
+                    const diff = Math.round((new Date(i.eta) - new Date()) / 60000);
+                    return formatMinutes(diff);
+                });
+                renderETA('ctb-b3', 'runner-ctb-b3', times);
+            } catch (e) {
+                renderETA('ctb-b3', 'runner-ctb-b3', []);
+            }
+
+            try {
+                const r = await fetch('https://rt.data.gov.hk/v1/transport/mtr/bus/getSchedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language: 'zh', routeName: '506' })
+                });
+                const data = await r.json();
+                const stop = data.busStop?.find(s => s.busStopId.includes("506-D010") && s.bus?.length > 0);
+                const times = stop ? stop.bus.slice(0, 2).map(b => b.departureTimeText || b.arrivalTimeText || "即將開出") : [];
+                renderETA('mtr-506', 'runner-mtr-506', times);
+            } catch (e) {
+                renderETA('mtr-506', 'runner-mtr-506', []);
+            }
+
+            try {
+                const r = await fetch('https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule?station_id=240');
+                const d = await r.json();
+                const trains = d.platform_list?.flatMap(p => p.route_list).filter(i => i.route_no === "507" && i.dest_ch === "田景");
+                const times = trains.slice(0, 2).map(t => {
+                    return t.time_ch ? t.time_ch.replace('分鐘', ' 分鐘') : null;
+                });
+                renderETA('lrt-507', 'runner-lrt-507', times);
+            } catch (e) {
+                renderETA('lrt-507', 'runner-lrt-507', []);
+            }
+        }
+
+        updateAll();
+        setInterval(updateAll, 60000);
+    </script>
+</body>
+</html>
